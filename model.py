@@ -1,4 +1,6 @@
+import torch
 import torch.nn as nn
+from torch.utils import data
 
 class RNNModel(nn.Module):
 
@@ -9,6 +11,8 @@ class RNNModel(nn.Module):
 						 batch_size,
 						 num_layers,
 						 num_entities):
+		
+		super(RNNModel, self).__init__()
 
 		self.embedding_size = embedding_size
 		self.bidir = bidir
@@ -33,21 +37,21 @@ class RNNModel(nn.Module):
 						 	dropout = 0,
 						 	bidirectional = self.bidir)
 
-		self.hidden_state_0 = self.init_hidden_state(num_layers, bidir, hidden_size, batch_size)
+		self.hidden_state_0 = self.init_hidden_state(self.num_layers, self.bidir, self.hidden_units, self.batch_size)
 		
-		self.cell_state_0 	= self.init_cell_state(num_layers, bidir, hidden_size, batch_size)
+		self.cell_state_0 	= self.init_cell_state(self.num_layers, self.bidir, self.hidden_units, self.batch_size)
 
 		# linear layer 
 		if bidir:
-			self.layer_1 = nn.Linear(self.hidden_state*2*self.num_layers, num_entities)
+			self.layer_1 = nn.Linear(self.hidden_units*2*self.num_layers, num_entities)
 		else:
-			self.layer_1 = nn.Linear(self.hidden_state*self.num_layers, num_entities)
+			self.layer_1 = nn.Linear(self.hidden_units*self.num_layers, num_entities)
 
 		# softmax
 		self.logSoftmax = nn.LogSoftmax(dim=1) 
 
 
-	def init_hidden_state(num_layers, bidir, hidden_size, batch_size ):
+	def init_hidden_state(self, num_layers, bidir, hidden_size, batch_size ):
 
 		# if bidirectioal, size doubles
 		if bidir:
@@ -55,9 +59,9 @@ class RNNModel(nn.Module):
 		else:
 			row_size = num_layers
 
-		return torch.zeros([num_layers*bidir, batch_size, hidden_size ], requires_grad=False)
+		return torch.zeros([row_size, batch_size, hidden_size ], requires_grad=False)
 
-	def init_cell_state(num_layers, bidir, hidden_size, batch_size ):
+	def init_cell_state(self, num_layers, bidir, hidden_size, batch_size ):
 
 		# if bidirectioal, size doubles
 		if bidir:
@@ -65,9 +69,7 @@ class RNNModel(nn.Module):
 		else:
 			row_size = num_layers
 
-		return torch.zeros([num_layers*bidir, batch_size, hidden_size ], requires_grad=False)
-
-
+		return torch.zeros([row_size, batch_size, hidden_size], requires_grad=False)
 
 	def forward(self, queries):
 		# queries
@@ -84,10 +86,10 @@ class RNNModel(nn.Module):
 			# 5 compute loss 
 		
 		# step 1
-		embdd_query = self.embedding_matrix(queries)
+		embdd_query = self.embedding_matrix(queries.type(torch.LongTensor))
 
 		# step 2
-		rnn_out, (h_t, c_t) = self.rnn(embdd_query, self.hidden_state_0, self.cell_state_0)
+		rnn_out, (h_t, c_t) = self.rnn(embdd_query, (self.hidden_state_0, self.cell_state_0))
 
 		# transpose, make batch_size the first axis
 		h_t = h_t.transpose(0, 1)
@@ -100,7 +102,7 @@ class RNNModel(nn.Module):
 		nn_out = self.layer_1(h_t)
 
 		# apply softmax
-		nn_out = self.LogSoftmax(nn_out)
+		nn_out = self.logSoftmax(nn_out)
 
 		return nn_out
 
