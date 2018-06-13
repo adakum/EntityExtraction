@@ -2,6 +2,12 @@ import os,sys
 import numpy as np
 from torch.utils import data
 
+_PAD_IDX = 0
+_UNK_TAG = 1
+
+# unknown entity
+_UNK_ENT = 1
+
 class textData(data.Dataset):
 	
 	def __init__(self, filename, vocab_size):
@@ -29,7 +35,7 @@ class textData(data.Dataset):
 		# vocab size
 		self.vocab_size = vocab_size
 		
-		with open(filename, "r") as reader:
+		with open(filename, "r", encoding="utf-8") as reader:
 			self.data = [(line.strip().split("\t")[0], line.strip().split("\t")[1]) for line in reader.readlines()]
 
 		# get index for each word
@@ -40,8 +46,15 @@ class textData(data.Dataset):
 
 	def Queries2Idx(self):
 		
+		def getWord2Idx(w):
+			try :
+				return self.word2idx[w]
+			except Exception as e:
+				return _UNK_TAG
+		
 		for (query, entity) in self.data:
-			inp_seq = [self.word2idx[x] for x in query.split()]
+			
+			inp_seq = [getWord2Idx(x) for x in query.split()]
 			self.queries = self.queries + [inp_seq]
 			self.target  = self.target + [self.ent2idx[entity]]
 
@@ -54,14 +67,14 @@ class textData(data.Dataset):
 					word2cnt[w] = word2cnt[w] + 1
 				except:
 					word2cnt[w] = 1 
-
 		
 		words = [k for k in sorted(word2cnt, key=word2cnt.get, reverse=True)]
+		# add PAD as 0th index
+		words = ["PAD_TAG", "UNK_TAG"] + words
 
 		# take top self.vocab_size words
 		if len(words) > self.vocab_size :
 			words = words[:self.vocab_size]
-
 
 		for i,w in enumerate(words):
 			self.word2idx[w] = i
@@ -80,3 +93,6 @@ class textData(data.Dataset):
 		x = self.queries[index]
 		y = self.target[index]
 		return np.array(x), y
+	
+	
+

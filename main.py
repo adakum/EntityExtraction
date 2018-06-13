@@ -1,13 +1,15 @@
 import argparse
 import os
 import sys
-import torch
+import torch, time
 import torch.nn as nn
 import torch.onnx
 import logging
 from datautils import textData
 from model import RNNModel
 from torch.utils import data
+
+_PAD_IDX = 0 
 
 parser = argparse.ArgumentParser(description='v.0.1 - Entity and Intent Classification')
 
@@ -42,11 +44,21 @@ parser.add_argument('--vocab_size', type = int, default = 800)
 # optimize and loss functions arguments
 # parser.add_argument('--optimi)
 parser.add_argument('--learning_rate', type = float, default = 0.01)
-
 parser.add_argument('--seed', type=int, default=108)
 
-# Set the random seed manually for reproducibility.
-# torch.manual_seed(args.seed)
+
+# expects a list of input seqs.
+def collate_fn(input):
+	# sort the input according to len
+	input = sorted(input, key = lambda x:len(x[0]), reverse = True)
+	seq = [list(x) for x,_ in input]
+	tgt = [x for _,x in input]
+	lens = [len(x) for x in seq]
+	max_len = lens[0]
+	seq = [x + [_PAD_IDX]*(max_len - len(x)) for x in seq]
+	seq = torch.stack([torch.LongTensor(x) for x in seq])
+	tgt = torch.LongTensor(tgt)	
+	return seq, tgt
 
 
 def train():
@@ -55,6 +67,7 @@ def train():
 	train_file = args.train_data
 	
 	# training data class
+	print("starting")
 	trainData = textData(train_file, args.vocab_size)
 	# model 
 	model = RNNModel(embedding_size = args.embedding_size,
@@ -65,15 +78,16 @@ def train():
 						num_layers = args.num_layers,
 						num_entities = args.num_entities)
 
-
 	# create the genereator for the training set and validation set
 	params = { 
 				'batch_size' : args.batch_size,
 				'shuffle'  : True,
-				'num_workers': 1
+				'num_workers': 1 ,
+				'collate_fn' : collate_fn
 			 }
 
 	train_gen = data.DataLoader(trainData, **params)
+	
 	max_epochs = args.epochs
 
 	# loss function and optimizer 
@@ -84,7 +98,7 @@ def train():
 		for batch_x, batch_y in train_gen:
 			if batch_y.size()[0] < args.batch_size:
 				continue
-			
+			print(batch_x)
 			# make zero grad
 			optimizer.zero_grad()
 			
@@ -97,18 +111,11 @@ def train():
 
 if __name__ == "__main__":
 	print("ck_1 - *** Starting *** ")
+	
 	args = parser.parse_args()
+	# Set the random seed manually for reproducibility.
+	torch.manual_seed(args.seed)
 
+	# print(collate_fn([([1,2,3],1), ([2,3,4,4,5],2), ([3,4,5,6,7],1)]))
 	if args.train:
 		train()
-
-
-
-
-
-
-
-
-
-
-
